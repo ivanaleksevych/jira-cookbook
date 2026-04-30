@@ -38,6 +38,11 @@ Rules:
 - Do NOT invent rows
 - Do NOT modify summaries or estimates
 
+## Critical Constraints
+- NEVER generate new content that is not present in input
+- NEVER enrich description with additional sections
+- NEVER interpret or expand requirements
+
 ---
 
 ## Step 3: Preview
