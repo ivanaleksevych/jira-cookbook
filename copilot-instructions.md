@@ -12,6 +12,7 @@ Call MCP tool `getJiraIssue` with:
 - `cloudId`: `"livescoregroup.atlassian.net"`
 - `issueIdOrKey`: the Epic key (e.g., `"PROD-20494"`)
 
+
 Save from the response:
 - `key` → Epic key (e.g., `"PROD-20494"`)
 - `id` → Epic internal ID (e.g., `"478482"`)
