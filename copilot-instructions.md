@@ -40,8 +40,6 @@ Rules:
 
 ## Critical Constraints
 - NEVER generate new content that is not present in input
-- NEVER enrich description with additional sections
-- NEVER interpret or expand requirements
 
 ---
 
