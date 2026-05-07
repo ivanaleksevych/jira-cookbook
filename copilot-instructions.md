@@ -36,6 +36,7 @@ Example table:
 Rules:
 - Do NOT skip rows
 - Do NOT invent rows
+- Always include request and response examples in the story when such examples are available.
 - Do NOT modify summaries or estimates
 
 ## Critical Constraints
