@@ -6,17 +6,27 @@ Create Jira Stories from an Epic using MCP tools.
 
 ---
 
+## Step 0: Get Epic Key from User
+
+The Epic key MUST be obtained from the user input (e.g., from the user's message,
+a referenced issue, or by explicitly asking the user if not provided).
+
+Do NOT use any hardcoded Epic key. Treat the Epic key as a required input parameter
+for this workflow and refer to it as `<EPIC_KEY>` in the steps below.
+
+---
+
 ## Step 1: Read the Epic
 
 Call MCP tool `getJiraIssue` with:
 - `cloudId`: `"livescoregroup.atlassian.net"`
-- `issueIdOrKey`: the Epic key (e.g., `"PROD-20494"`)
+- `issueIdOrKey`: `<EPIC_KEY>` (the Epic key provided by the user)
 
 
 Save from the response:
-- `key` → Epic key (e.g., `"PROD-20494"`)
-- `id` → Epic internal ID (e.g., `"478482"`)
-- `fields.priority.id` → Priority ID (e.g., `"10008"`)
+- `key` → Epic key (`<EPIC_KEY>`)
+- `id` → Epic internal ID (`<EPIC_INTERNAL_ID>`)
+- `fields.priority.id` → Priority ID (`<EPIC_PRIORITY_ID>`)
 
 ---
 
@@ -37,7 +47,19 @@ Rules:
 - Do NOT skip rows
 - Do NOT invent rows
 - Always include request and response examples in the story when such examples are available.
-- Do NOT modify summaries or estimates
+- Do NOT modify summaries or estimates, except for the estimate unit normalization below.
+
+### Estimate Unit Normalization
+
+If an estimate is provided in the `pd` / `ph` format, convert it to Jira's
+`d` / `h` format before passing it to `timetracking.originalEstimate`:
+
+- `<N>pd` → `<N>d` (e.g., `1pd` → `1d`, `2.5pd` → `2.5d`)
+- `<N>ph` → `<N>h` (e.g., `4ph` → `4h`)
+
+The numeric value MUST be preserved exactly; only the unit suffix changes.
+Estimates already in `d` / `h` (or any other Jira-supported unit) MUST be
+passed through unchanged.
 
 ## Critical Constraints
 - NEVER generate new content that is not present in input
@@ -92,7 +114,7 @@ All Jira-specific fields MUST go inside `additional_fields` as a JSON object.
   "customfield_10155": {"type": "doc", "version": 1, "content": [{"type": "paragraph", "content": [{"type": "text", "text": "-"}]}]},
   "assignee": {"id": "626a98c607b842006f154964"},
   "timetracking": {"originalEstimate": "<ESTIMATE>"},
-  "fixVersions": [{"name": "1.234 Test Ivan"}]
+  "fixVersions": [{"name": "LSM - BE 1.65.0 - Platform"}]
 }
 ```
 
@@ -100,7 +122,9 @@ All Jira-specific fields MUST go inside `additional_fields` as a JSON object.
 
 ## Complete Example
 
-To create a Story "Extend Bds Market import" with estimate "1d" under Epic PROD-20494 (priority.id = "10008"):
+To create a Story "Extend Bds Market import" with estimate "1d" under the
+user-provided Epic `<EPIC_KEY>` (priority.id = `<EPIC_PRIORITY_ID>` read from
+the Epic in Step 1):
 
 ```
 Tool: createJiraIssue
@@ -113,8 +137,8 @@ Parameters:
 - description: "Technical implementation details from LSM Technical analysis section..."
 - contentFormat: "markdown"
 - additional_fields: {
-    "priority": {"id": "10008"},
-    "parent": {"key": "PROD-20494"},
+    "priority": {"id": "<EPIC_PRIORITY_ID>"},
+    "parent": {"key": "<EPIC_KEY>"},
     "components": [{"id": "11078"}],
     "customfield_10156": {"id": "70121:4acf64ef-fbea-4399-b874-411f0bc38345"},
     "customfield_10001": "ba3cca31-9b6c-4488-bc91-ea4af3f614fd",
@@ -247,4 +271,4 @@ Before calling `createJiraIssue`, verify:
 | Team ID | `ba3cca31-9b6c-4488-bc91-ea4af3f614fd` |
 | Assignee ID | `626a98c607b842006f154964` |
 | Default Priority (P2) | `10007` |
-| Fix Version | `1.234 Test Ivan` |
+| Fix Version | `LSM - BE 1.65.0 - Platform` |
