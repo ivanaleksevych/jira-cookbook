@@ -1,108 +1,92 @@
 # Jira MCP Instructions – Epic → Stories Generator
 
 ## Goal
-
-Create Jira Stories from an Epic using MCP tools.
-
----
-
-## Step 0: Get Epic Key from User
-
-The Epic key MUST be obtained from the user input (e.g., from the user's message,
-a referenced issue, or by explicitly asking the user if not provided).
-
-Do NOT use any hardcoded Epic key. Treat the Epic key as a required input parameter
-for this workflow and refer to it as `<EPIC_KEY>` in the steps below.
+Read an Epic, take the **Suggested stories** table from its **BE Technical Analysis**
+field, and create one Jira Story per row.
 
 ---
 
 ## Step 1: Read the Epic
+The Epic key comes from the user (`<EPIC_KEY>`). Never hardcode it.
 
-Call MCP tool `getJiraIssue` with:
+Call `getJiraIssue`:
 - `cloudId`: `"livescoregroup.atlassian.net"`
-- `issueIdOrKey`: `<EPIC_KEY>` (the Epic key provided by the user)
+- `issueIdOrKey`: `<EPIC_KEY>`
+- `fields`: `["*all"]`
 
-
-Save from the response:
-- `key` → Epic key (`<EPIC_KEY>`)
-- `id` → Epic internal ID (`<EPIC_INTERNAL_ID>`)
-- `fields.priority.id` → Priority ID (`<EPIC_PRIORITY_ID>`)
+Save:
+- `key` → `<EPIC_KEY>`
+- `id` → `<EPIC_INTERNAL_ID>`
+- `fields.priority.id` → `<EPIC_PRIORITY_ID>` (fallback P2 = `10007`)
+- `fields.customfield_13982` → **BE Technical Analysis** (ADF) – the single source of truth
 
 ---
 
-## Step 2: Parse the Epic
-
-Find in the Epic description or custom fields:
-1. Section `LSM Technical analysis` → use as Story description source
-2. Table `Proposed Stories` → each row = one Story
-
-Example table:
-
-| Summary | Estimate |
-|---------|----------|
-| Task 1  | 1d       |
-| Task 2  | 4h       |
+## Step 2: Parse `BE Technical Analysis` (customfield_13982)
+1. Find the **`Suggested stories`** heading.
+2. Read the table under it. Columns: **Component | Story | Estimate**.
+   Each row = one Story.
+3. Everything else in `BE Technical Analysis` (overview, per-service sections,
+   processing flow, message/JSON examples, potential problems) is the Story
+   **description** source.
 
 Rules:
-- Do NOT skip rows
-- Do NOT invent rows
-- Always include request and response examples in the story when such examples are available.
-- Do NOT modify summaries or estimates, except for the estimate unit normalization below.
+- Use the **table** as the list of stories (not the free-text bullets above it).
+- Do NOT skip, add, merge or reword rows.
+- Story `summary` = `"<Component> <Story>"` (e.g. `"[ai-service] Add embed_iframe ..."`).
 
-### Estimate Unit Normalization
+### STRICT rules for `description` (non-negotiable)
+The description MUST contain **only text copied verbatim from the Epic's
+`BE Technical Analysis`**. These rules cannot be relaxed:
+- **Do NOT invent, infer, assume, summarize, rephrase or expand** anything.
+  Not a single sentence, field, value, example or detail may appear in the
+  Story that is not literally present in the Epic.
+- **Do NOT move content between sections.** Copy each story's own matching
+  section as-is. Do not attach the `ai-service` block-fields table or JSON
+  example to the `media-aggregator-processor` story, etc.
+- Map each story to its own section of `BE Technical Analysis`:
+  - `[media-aggregator-processor]` → the `media aggregator processor` /
+    `Support embed_iframe content block type` section.
+  - `[ai-service]` → the `ai-service` section (incl. its block-fields table and
+    the `ai-pipeline-execution-response` JSON example) + its `Suggested stories`
+    paragraph.
+  - `[evals]` → its `Suggested stories` paragraph.
+- If a story has no descriptive text in the Epic beyond its table row, the
+  description = only that row's text. Never pad it.
+- Copy JSON / message examples exactly as written, wrapped in ` ```json ` blocks.
+- Never invent content that is not in the Epic.
 
-If an estimate is provided in the `pd` / `ph` format, convert it to Jira's
-`d` / `h` format before passing it to `timetracking.originalEstimate`:
-
-- `<N>pd` → `<N>d` (e.g., `1pd` → `1d`, `2.5pd` → `2.5d`)
-- `<N>ph` → `<N>h` (e.g., `4ph` → `4h`)
-
-The numeric value MUST be preserved exactly; only the unit suffix changes.
-Estimates already in `d` / `h` (or any other Jira-supported unit) MUST be
-passed through unchanged.
-
-## Critical Constraints
-- NEVER generate new content that is not present in input
+### Estimate normalization
+Convert to Jira units for `timetracking.originalEstimate`:
+- `<N>pd` → `<N>d` (`1pd` → `1d`, `2.5pd` → `2.5d`)
+- `<N>ph` → `<N>h`
+- Values already in `d` / `h` pass through unchanged. Keep the number exact.
 
 ---
 
 ## Step 3: Preview
-
-Before creating, show:
-
+Show the parsed list, then create automatically (no confirmation):
 ```
 Preview:
-1. Task 1 (1d)
-2. Task 2 (4h)
+1. [media-aggregator-processor] Support embed_iframe content block type (1d)
+2. [ai-service] Add embed_iframe to the PARTNERS_ARTICLE pipeline ... (2d)
+3. [evals] Add test cases covering embed_iframe vs. existing embed type priority (1d)
 ```
-
-Then proceed to create automatically. Do not ask for confirmation.
 
 ---
 
 ## Step 4: Create Stories
-
-For EACH row in `Proposed Stories`, call MCP tool `createJiraIssue`.
-
-### MCP Tool Parameters
-
-The `createJiraIssue` tool has these parameters:
+For EACH row call `createJiraIssue`:
 
 | Parameter | Value |
 |-----------|-------|
 | `cloudId` | `"livescoregroup.atlassian.net"` |
 | `projectKey` | `"PROD"` |
 | `issueTypeName` | `"Story"` |
-| `summary` | From table row |
-| `description` | From LSM Technical analysis (use markdown) |
+| `summary` | `"<Component> <Story>"` |
+| `description` | From `BE Technical Analysis` (markdown) |
 | `contentFormat` | `"markdown"` |
-| `additional_fields` | JSON object with all other Jira fields (see below) |
-
-### The `additional_fields` Parameter (CRITICAL)
-
-All Jira-specific fields MUST go inside `additional_fields` as a JSON object.
-
-**IMPORTANT**: The `additional_fields` value must be a valid JSON object, not a string.
+| `additional_fields` | JSON object below |
 
 ```json
 {
@@ -110,165 +94,105 @@ All Jira-specific fields MUST go inside `additional_fields` as a JSON object.
   "parent": {"key": "<EPIC_KEY>"},
   "components": [{"id": "11078"}],
   "customfield_10156": {"id": "70121:4acf64ef-fbea-4399-b874-411f0bc38345"},
-  "customfield_10001": "ba3cca31-9b6c-4488-bc91-ea4af3f614fd",
+  "customfield_10001": "8fbf2d82-c7a5-4079-a7e1-7f5299e53152-163",
   "customfield_10155": {"type": "doc", "version": 1, "content": [{"type": "paragraph", "content": [{"type": "text", "text": "-"}]}]},
   "assignee": {"id": "626a98c607b842006f154964"},
   "timetracking": {"originalEstimate": "<ESTIMATE>"},
-  "fixVersions": [{"name": "LSM - BE 1.65.0 - Platform"}]
+  "fixVersions": [{"name": "LSM - BE 1.68.0 - Platform"}]
 }
 ```
 
 ---
 
-## Complete Example
-
-To create a Story "Extend Bds Market import" with estimate "1d" under the
-user-provided Epic `<EPIC_KEY>` (priority.id = `<EPIC_PRIORITY_ID>` read from
-the Epic in Step 1):
+## Worked Example (verified — PROD-37860)
+Row 1 of the `Suggested stories` table in Epic `PROD-20494`
+(`[media-aggregator-processor]` | `Support embed_iframe content block type` | `1d`)
+was created successfully with this exact call:
 
 ```
 Tool: createJiraIssue
-
-Parameters:
 - cloudId: "livescoregroup.atlassian.net"
 - projectKey: "PROD"
 - issueTypeName: "Story"
-- summary: "Extend Bds Market import with selection probability"
-- description: "Technical implementation details from LSM Technical analysis section..."
+- summary: "[media-aggregator-processor] Support embed_iframe content block type"
+- description: <BE Technical Analysis text for this story + the ai-pipeline-execution-response
+                JSON wrapped in a ```json code block>
 - contentFormat: "markdown"
 - additional_fields: {
-    "priority": {"id": "<EPIC_PRIORITY_ID>"},
-    "parent": {"key": "<EPIC_KEY>"},
+    "priority": {"id": "10007"},
+    "parent": {"key": "PROD-20494"},
     "components": [{"id": "11078"}],
     "customfield_10156": {"id": "70121:4acf64ef-fbea-4399-b874-411f0bc38345"},
-    "customfield_10001": "ba3cca31-9b6c-4488-bc91-ea4af3f614fd",
+    "customfield_10001": "8fbf2d82-c7a5-4079-a7e1-7f5299e53152-163",
     "customfield_10155": {"type": "doc", "version": 1, "content": [{"type": "paragraph", "content": [{"type": "text", "text": "-"}]}]},
     "assignee": {"id": "626a98c607b842006f154964"},
     "timetracking": {"originalEstimate": "1d"},
-    "fixVersions": [{"name": "1.234 Test Ivan"}]
+    "fixVersions": [{"name": "LSM - BE 1.68.0 - Platform"}]
   }
 ```
+Result: created `PROD-37860`. Use this as the template for the remaining rows,
+changing only `summary`, `description` and `timetracking.originalEstimate`.
 
 ---
 
 ## Field Reference
 
-### Mandatory Fields in `additional_fields`
+### Mandatory (`additional_fields`)
+| Field | Meaning | Value |
+|-------|---------|-------|
+| `priority` | Priority | `{"id": "<from_epic>"}` (fallback `10007`) |
+| `parent` | Epic link | `{"key": "<EPIC_KEY>"}` |
+| `components` | Component | `[{"id": "11078"}]` |
+| `customfield_10156` | Product Owner | `{"id": "70121:4acf64ef-fbea-4399-b874-411f0bc38345"}` (Natalia Klipailo) |
+| `customfield_10155` | Acceptance Criteria (ADF) | `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"-"}]}]}` |
 
-These fields are required by Jira and MUST be included:
-
-| Field | Description | Value |
-|-------|-------------|-------|
-| `priority` | Priority object | `{"id": "<from_epic>"}` |
-| `parent` | Link to Epic | `{"key": "<EPIC_KEY>"}` |
-| `components` | Component array | `[{"id": "11078"}]` |
-| `customfield_10156` | Product Owner | `{"id": "70121:4acf64ef-fbea-4399-b874-411f0bc38345"}` |
-| `customfield_10155` | Acceptance Criteria (ADF) | See below |
-
-### Optional Fields in `additional_fields`
-
-| Field | Description | Value |
-|-------|-------------|-------|
-| `customfield_10001` | Team | `"ba3cca31-9b6c-4488-bc91-ea4af3f614fd"` |
+### Optional (`additional_fields`)
+| Field | Meaning | Value |
+|-------|---------|-------|
+| `customfield_10001` | Team | `<TEAM_ID>` — pick per user request (see Teams table) |
 | `assignee` | Assignee | `{"id": "626a98c607b842006f154964"}` |
 | `timetracking` | Estimate | `{"originalEstimate": "<from_table>"}` |
-| `fixVersions` | Fix Version | `[{"name": "1.234 Test Ivan"}]` |
+| `fixVersions` | Fix Version | `[{"name": "LSM - BE 1.68.0 - Platform"}]` |
 
-### Priority Fallback
+### Teams (`customfield_10001`)
+Select the team the user asks for. Default to `delta` if none specified.
 
-If Epic has no priority, use P2:
-```json
-{"id": "10007"}
-```
-
-### Acceptance Criteria (ADF Format)
-
-Always use this exact value:
-```json
-{
-  "type": "doc",
-  "version": 1,
-  "content": [
-    {
-      "type": "paragraph",
-      "content": [
-        {"type": "text", "text": "-"}
-      ]
-    }
-  ]
-}
-```
+| Team | ID |
+|------|-----|
+| `bravo` | `8fbf2d82-c7a5-4079-a7e1-7f5299e53152-161` |
+| `delta` | `8fbf2d82-c7a5-4079-a7e1-7f5299e53152-163` |
 
 ---
 
 ## Error Handling
-
-### Error: "Description, Priority, Parent, Product Owner & Components are mandatory fields"
-
-Missing required fields. Check that `additional_fields` contains:
-- `priority` with `id`
-- `parent` with `key`
-- `components` array with `id`
-- `customfield_10156` with `id`
-
-Also ensure `description` parameter is not empty.
-
-### Error: "parent: Could not find issue by id or key"
-
-1. Re-read the Epic
-2. Verify the Epic key
-3. Try `parent` with `id` instead of `key`:
-   ```json
-   {"id": "<EPIC_INTERNAL_ID>"}
-   ```
-
-### Error: fixVersions rejected
-
-Retry with empty array:
-```json
-"fixVersions": []
-```
+- **"Description, Priority, Parent, Product Owner & Components are mandatory"** →
+  ensure `description` is set and `additional_fields` has `priority.id`,
+  `parent.key`, `components[0].id`, `customfield_10156.id`.
+- **"parent: Could not find issue"** → re-read Epic; try `parent` with
+  `{"id": "<EPIC_INTERNAL_ID>"}`.
+- **`fixVersions` rejected** → retry with `"fixVersions": []`.
 
 ---
 
 ## Step 5: Output
-
-After all Stories are created, return:
-- List of created issue keys
-- Any failed rows with the exact Jira error
-
----
-
-## Quick Checklist Before Creating
-
-Before calling `createJiraIssue`, verify:
-
-- [ ] `cloudId` = `"livescoregroup.atlassian.net"`
-- [ ] `projectKey` = `"PROD"`
-- [ ] `issueTypeName` = `"Story"`
-- [ ] `summary` = from table (not empty)
-- [ ] `description` = from LSM Technical analysis (not empty)
-- [ ] `contentFormat` = `"markdown"`
-- [ ] `additional_fields` contains:
-  - [ ] `priority.id` (from Epic or `"10007"`)
-  - [ ] `parent.key` (Epic key)
-  - [ ] `components[0].id` = `"11078"`
-  - [ ] `customfield_10156.id` = Product Owner ID
-  - [ ] `customfield_10155` = ADF object for Acceptance Criteria
-  - [ ] `timetracking.originalEstimate` (from table)
+Return created issue keys, plus any failed rows with the exact Jira error.
 
 ---
 
 ## Constants
-
 | Name | Value |
 |------|-------|
 | Cloud ID | `livescoregroup.atlassian.net` |
 | Project Key | `PROD` |
 | Issue Type | `Story` |
+| BE Technical Analysis field | `customfield_13982` |
+| Product Owner field | `customfield_10156` |
+| Team field | `customfield_10001` |
 | Component ID (LSM BE) | `11078` |
-| Product Owner ID | `70121:4acf64ef-fbea-4399-b874-411f0bc38345` |
-| Team ID | `ba3cca31-9b6c-4488-bc91-ea4af3f614fd` |
+| Product Owner (Natalia Klipailo) | `70121:4acf64ef-fbea-4399-b874-411f0bc38345` |
+| Team `bravo` | `8fbf2d82-c7a5-4079-a7e1-7f5299e53152-161` |
+| Team `delta` (default) | `8fbf2d82-c7a5-4079-a7e1-7f5299e53152-163` |
 | Assignee ID | `626a98c607b842006f154964` |
 | Default Priority (P2) | `10007` |
-| Fix Version | `LSM - BE 1.65.0 - Platform` |
+| Fix Version | `LSM - BE 1.68.0 - Platform` |
+
