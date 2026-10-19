@@ -35,6 +35,11 @@ Save:
 ## Step 2: Parse `Technical Analysis` (customfield_18234)
 1. Find the **`Suggested stories`** heading.
 2. Read the table under it. Columns: **Component | Jira | Estimate**.
+   - `Component` – component tag, used exactly as written (including the
+     square brackets, e.g. `[media-aggregator-processor]`).
+   - `Jira` – the story title.
+   - `Estimate` – the story estimate.
+
    Each row = one Story.
 3. Everything else in `Technical Analysis` (overview, per-service sections,
    processing flow, message/JSON examples, potential problems) is the Story
@@ -43,7 +48,8 @@ Save:
 Rules:
 - Use the **table** as the list of stories (not the free-text bullets above it).
 - Do NOT skip, add, merge or reword rows.
-- Story `summary` = `"<Component> <Story>"` (e.g. `"[ai-service] Add embed_iframe ..."`).
+- Story `summary` = `"<Component> <Jira>"` – the two cell values joined by a
+  single space (e.g. `"[ai-service] Add embed_iframe ..."`).
 
 ### STRICT rules for `description` (non-negotiable)
 The description MUST contain **only text copied verbatim from the ATA ticket's
@@ -56,7 +62,12 @@ The description MUST contain **only text copied verbatim from the ATA ticket's
   different component's story.
 - Map each story to its own section of `Technical Analysis` (match by the
   component name heading, e.g. `media-aggregator-processor`,
-  `media-aggregator-api`, etc.).
+  `media-aggregator-api`, etc.):
+  - If the component section has a sub-section dedicated to this specific
+    story (matching the `Jira` text), use only that sub-section.
+  - If several stories share one component section with no per-story
+    sub-sections, copy the whole component section into each of those
+    stories. Do not try to split it.
 - If a story has no descriptive text in the ATA beyond its table row, the
   description = only that row's text. Never pad it.
 - Copy JSON / message examples exactly as written, wrapped in ` ```json ` blocks.
@@ -64,6 +75,18 @@ The description MUST contain **only text copied verbatim from the ATA ticket's
   `timetracking.originalEstimate`. Remove any `Estimate: ...` line even if the
   ATA text contains it.
 - Never invent content that is not in the ATA.
+
+### ADF → markdown conversion
+`description` is sent as markdown, so convert the copied ADF nodes 1:1,
+changing only the format, never the text:
+| ADF node | Markdown |
+|----------|----------|
+| heading (level N) | `#` × N |
+| paragraph | plain text line |
+| bulletList / orderedList | `-` / `1.` items, nesting preserved |
+| table | markdown table, same rows/columns/cell text |
+| codeBlock (JSON / message examples) | ` ```json ` block (or the block's own language), content unchanged |
+| inline code / strong / em / link | `` `x` `` / `**x**` / `*x*` / `[text](url)` |
 
 ### Estimate normalization
 Convert to Jira units for `timetracking.originalEstimate`:
@@ -92,7 +115,7 @@ For EACH row call `createJiraIssue`:
 | `cloudId` | `"livescoregroup.atlassian.net"` |
 | `projectKey` | `"PROD"` |
 | `issueTypeName` | `"Story"` |
-| `summary` | `"<Component> <Story>"` |
+| `summary` | `"<Component> <Jira>"` |
 | `description` | From `Technical Analysis` (markdown, **no Estimate line**) |
 | `contentFormat` | `"markdown"` |
 | `additional_fields` | JSON object below |
@@ -103,7 +126,7 @@ For EACH row call `createJiraIssue`:
   "parent": {"key": "<PARENT_KEY>"},
   "components": [{"id": "11078"}],
   "customfield_10156": {"id": "70121:4acf64ef-fbea-4399-b874-411f0bc38345"},
-  "customfield_10001": "8fbf2d82-c7a5-4079-a7e1-7f5299e53152-163",
+  "customfield_10001": "<TEAM_ID>",
   "customfield_10155": {"type": "doc", "version": 1, "content": [{"type": "paragraph", "content": [{"type": "text", "text": "-"}]}]},
   "assignee": {"id": "626a98c607b842006f154964"},
   "timetracking": {"originalEstimate": "<ESTIMATE>"},
@@ -155,10 +178,14 @@ Use this as the template for the remaining rows, changing only `summary`,
 | `customfield_10156` | Product Owner | `{"id": "70121:4acf64ef-fbea-4399-b874-411f0bc38345"}` (Natalia Klipailo) |
 | `customfield_10155` | Acceptance Criteria (ADF) | `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"-"}]}]}` |
 
-### Optional (`additional_fields`)
+### Always set (`additional_fields`)
 | Field | Meaning | Value |
 |-------|---------|-------|
 | `customfield_10001` | Team | `<TEAM_ID>` — pick per user request (see Teams table) |
+
+### Optional (`additional_fields`)
+| Field | Meaning | Value |
+|-------|---------|-------|
 | `assignee` | Assignee | `{"id": "626a98c607b842006f154964"}` |
 | `timetracking` | Estimate | `{"originalEstimate": "<from_table>"}` |
 | `fixVersions` | Fix Version | `[{"name": "LSM - BE 1.69.0 - Platform"}]` |
@@ -177,14 +204,18 @@ Select the team the user asks for. Default to `delta` if none specified.
 - **"Description, Priority, Parent, Product Owner & Components are mandatory"** →
   ensure `description` is set and `additional_fields` has `priority.id`,
   `parent.key`, `components[0].id`, `customfield_10156.id`.
-- **"parent: Could not find issue"** → re-read Epic; try `parent` with
-  `{"id": "<EPIC_INTERNAL_ID>"}`.
-- **`fixVersions` rejected** → retry with `"fixVersions": []`.
+- **"parent: Could not find issue"** → call `getJiraIssue` on `<PARENT_KEY>`,
+  take its `id`, and retry the row with `"parent": {"id": "<PARENT_INTERNAL_ID>"}`.
+- **`fixVersions` rejected** → retry the row with `"fixVersions": []` and
+  mention in Step 5 that the story was created without a Fix Version.
 
 ---
 
 ## Step 5: Output
-Return created issue keys, plus any failed rows with the exact Jira error.
+Return:
+- created issue keys;
+- stories created with a fallback (e.g. without Fix Version);
+- failed rows with the exact Jira error.
 
 ---
 
